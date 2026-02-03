@@ -1,0 +1,8 @@
+{
+    "java.project.sourcePaths": ["src"],
+    "java.project.outputPath": "bin",
+    "java.project.referencedLibraries": [
+        "lib/**/*.jar"
+    ],
+    "idf.pythonInstallPath": "/Library/Frameworks/Python.framework/Versions/3.15/bin/python3"
+}
