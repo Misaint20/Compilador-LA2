@@ -1,12 +1,12 @@
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.io.File;
 
 public class EditorFrame extends JFrame {
-    private JTextArea txtEditor = new JTextArea();
+    private JTextPane txtEditor = new JTextPane();
     private JTextArea txtConsola = new JTextArea();
     private File archivoActual = null;
-
     private AnalizadorLexico lexico = new AnalizadorLexico();
     private AnalizadorSintactico sintactico = new AnalizadorSintactico();
     private Elementos elementos = new Elementos();
@@ -16,135 +16,91 @@ public class EditorFrame extends JFrame {
         setSize(1000, 700);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
-
-        setupEstilo();
+        setupUI();
         setupMenus();
+    }
 
-        JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
-                new JScrollPane(txtEditor), new JScrollPane(txtConsola));
+    private void setupUI() {
+        txtEditor.setBackground(new Color(35, 35, 35));
+        txtEditor.setForeground(Color.WHITE);
+        txtEditor.setFont(new Font("Consolas", Font.PLAIN, 16));
+        txtEditor.setCaretColor(Color.WHITE);
+
+        txtConsola.setBackground(new Color(20, 20, 20));
+        txtConsola.setForeground(new Color(150, 255, 150));
+        txtConsola.setEditable(false);
+        txtConsola.setFont(new Font("Monospaced", Font.PLAIN, 14));
+        txtConsola.setBorder(new EmptyBorder(10, 20, 10, 10));
+
+        JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(txtEditor), new JScrollPane(txtConsola));
         split.setDividerLocation(450);
         add(split);
     }
 
-    private void setupEstilo() {
-        txtEditor.setBackground(new Color(30, 30, 30));
-        txtEditor.setForeground(new Color(220, 220, 220));
-        txtEditor.setCaretColor(Color.WHITE);
-        txtEditor.setFont(new Font("Consolas", Font.PLAIN, 14));
-        txtConsola.setBackground(new Color(20, 20, 20));
-        txtConsola.setForeground(new Color(150, 255, 150));
-        txtConsola.setEditable(false);
-    }
-
     private void setupMenus() {
         JMenuBar mb = new JMenuBar();
+        JMenu mArc = new JMenu("Archivo");
+        agregarItem(mArc, "Nuevo", e -> { txtEditor.setText(""); archivoActual = null; });
+        agregarItem(mArc, "Abrir", e -> { archivoActual = ManejadorArchivos.abrir(this, txtEditor); });
+        agregarItem(mArc, "Guardar", e -> guardar());
+        agregarItem(mArc, "Guardar como", e -> { archivoActual = ManejadorArchivos.guardarComo(this, txtEditor); });
+        mArc.addSeparator();
+        agregarItem(mArc, "Salir", e -> System.exit(0));
 
-        // --- MENÚ ARCHIVO ---
-        JMenu mArchivo = new JMenu("Archivo");
-        agregarItem(mArchivo, "Nuevo", e -> {
-            txtEditor.setText("");
-            archivoActual = null;
-            setTitle("Nuevo Archivo");
-        });
-        agregarItem(mArchivo, "Abrir", e -> {
-            archivoActual = ManejadorArchivos.abrir(this, txtEditor);
-            if (archivoActual != null)
-                setTitle("Editando: " + archivoActual.getName());
-        });
-        agregarItem(mArchivo, "Guardar", e -> guardar());
-        agregarItem(mArchivo, "Guardar como...", e -> {
-            File f = ManejadorArchivos.guardarComo(this, txtEditor);
-            if (f != null) {
-                archivoActual = f;
-                setTitle("Guardado: " + archivoActual.getName());
-            }
-        });
-        mArchivo.addSeparator();
-        agregarItem(mArchivo, "Salir", e -> System.exit(0));
-
-        JMenu mCompilar = new JMenu("Compilar");
-        agregarItem(mCompilar, "Análisis Léxico", e -> {
-            if (validarArchivo())
+        JMenu mComp = new JMenu("Compilar");
+        agregarItem(mComp, "Análisis Léxico", e -> {
+            if (val()) {
                 txtConsola.setText("");
-            txtConsola.setForeground(new Color(150, 255, 150));
-            txtConsola.setText(lexico.ejecutar(archivoActual, elementos));
-        });
-        agregarItem(mCompilar, "Análisis Sintáctico", e -> {
-            if (validarArchivo())
-                txtConsola.setText("");
-            String resultado = sintactico.analizarEstructuras(archivoActual);
-
-            if (resultado.contains("Error [")) {
-                txtConsola.setForeground(Color.RED);
-            } else {
                 txtConsola.setForeground(new Color(150, 255, 150));
+                txtConsola.setText(lexico.ejecutar(archivoActual, elementos));
             }
-
-            txtConsola.setText(resultado);
-        });
-        agregarItem(mCompilar, "Traducir Reservadas", e -> {
-            txtConsola.setForeground(new Color(150, 255, 150));
-            traducir();
         });
 
-        mb.add(mArchivo);
-        mb.add(mCompilar);
+        agregarItem(mComp, "Análisis Sintáctico", e -> {
+            if (val()) {
+                txtConsola.setText("");
+                String res = sintactico.analizarEstructuras(archivoActual);
+                if (res.contains("Error")) txtConsola.setForeground(Color.RED);
+                else txtConsola.setForeground(new Color(150, 255, 150));
+                txtConsola.setText(res);
+            }
+        });
+
+        agregarItem(mComp, "Traducir", e -> traducir());
+
+        mb.add(mArc); mb.add(mComp);
         setJMenuBar(mb);
     }
 
-    private void agregarItem(JMenu menu, String nombre, java.awt.event.ActionListener accion) {
-        JMenuItem item = new JMenuItem(nombre);
-        item.addActionListener(accion);
-        menu.add(item);
-    }
-
     private void traducir() {
-        txtConsola.setText("--- Traducción de Reservadas ---\n");
+        if (txtEditor.getText().isEmpty()) return;
+        txtConsola.setText("");
+        txtConsola.setForeground(new Color(150, 255, 150));
         String[] lineas = txtEditor.getText().split("\n");
-        boolean encontroAlguna = false;
-
         for (int i = 0; i < lineas.length; i++) {
-            String linea = lineas[i];
-            StringBuilder halladasEnLinea = new StringBuilder();
-            boolean hayEnEstaLinea = false;
-
-            // Buscamos cada palabra del diccionario en la línea actual
-            for (String palabraClave : elementos.PalabrasReservadas.keySet()) {
-                if (linea.matches(".*\\b" + palabraClave + "\\b.*")) {
-                    halladasEnLinea.append(palabraClave).append(" → ")
-                            .append(elementos.PalabrasReservadas.get(palabraClave)).append("  ");
-                    hayEnEstaLinea = true;
-                    encontroAlguna = true;
+            for (String k : elementos.PalabrasReservadas.keySet()) {
+                if (lineas[i].contains(k)) {
+                    txtConsola.append("L" + (i + 1) + ": " + k + " -> " + elementos.PalabrasReservadas.get(k) + "\n");
                 }
             }
-
-            if (hayEnEstaLinea) {
-                txtConsola.append("Línea " + (i + 1) + ": " + halladasEnLinea.toString() + "\n");
-            }
-        }
-
-        if (!encontroAlguna) {
-            txtConsola.append("No se encontraron palabras reservadas en el código.\n");
-        } else {
-            txtConsola.append("\nTraducción completada.\n");
         }
     }
 
     private void guardar() {
-        if (archivoActual == null)
-            archivoActual = ManejadorArchivos.guardarComo(this, txtEditor);
-        else
-            ManejadorArchivos.guardarExistente(archivoActual, txtEditor);
-        if (archivoActual != null)
-            setTitle("Guardado: " + archivoActual.getName());
+        if (archivoActual == null) archivoActual = ManejadorArchivos.guardarComo(this, txtEditor);
+        else ManejadorArchivos.guardarExistente(archivoActual, txtEditor);
     }
 
-    private boolean validarArchivo() {
+    private boolean val() {
         if (archivoActual == null) {
-            JOptionPane.showMessageDialog(this, "Debe guardar el archivo (.c) antes de procesar.");
+            JOptionPane.showMessageDialog(this, "Debe guardar el archivo primero.");
             return false;
         }
         ManejadorArchivos.guardarExistente(archivoActual, txtEditor);
         return true;
+    }
+
+    private void agregarItem(JMenu m, String n, java.awt.event.ActionListener a) {
+        JMenuItem i = new JMenuItem(n); i.addActionListener(a); m.add(i);
     }
 }

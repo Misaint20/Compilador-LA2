@@ -1,9 +1,10 @@
 import javax.swing.*;
+import javax.swing.text.JTextComponent;
 import java.io.*;
 
 public class ManejadorArchivos {
-    
-    public static File abrir(JFrame padre, JTextArea editor) {
+
+    public static File abrir(JFrame padre, JTextComponent editor) {
         JFileChooser fc = new JFileChooser();
         fc.setDialogTitle("Abrir archivo fuente (.c)");
         if (fc.showOpenDialog(padre) == JFileChooser.APPROVE_OPTION) {
@@ -18,12 +19,11 @@ public class ManejadorArchivos {
         return null;
     }
 
-    public static File guardarComo(JFrame padre, JTextArea editor) {
+    public static File guardarComo(JFrame padre, JTextComponent editor) {
         JFileChooser fc = new JFileChooser();
         fc.setDialogTitle("Guardar como...");
         if (fc.showSaveDialog(padre) == JFileChooser.APPROVE_OPTION) {
             File f = fc.getSelectedFile();
-            // Asegurar que tenga extensión .c si no la tiene
             if (!f.getName().endsWith(".c")) {
                 f = new File(f.getAbsolutePath() + ".c");
             }
@@ -33,7 +33,7 @@ public class ManejadorArchivos {
         return null;
     }
 
-    public static void guardarExistente(File f, JTextArea editor) {
+    public static void guardarExistente(File f, JTextComponent editor) {
         try (BufferedWriter bw = new BufferedWriter(new FileWriter(f))) {
             editor.write(bw);
         } catch (IOException e) {

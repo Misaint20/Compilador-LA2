@@ -1,5 +1,9 @@
 #include <stdio.h>
 
+float suma(float a, float b){ 
+    return a + b;
+}
+
 int main() {
     int num1, num2, suma;
     printf("Introduce el primer numero: ");
