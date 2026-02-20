@@ -1,5 +1,7 @@
 #include <stdio.h>
 
+int a;
+
 float suma(float a, float b){ 
     return a + b;
 }

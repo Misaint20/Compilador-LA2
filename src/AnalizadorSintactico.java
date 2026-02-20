@@ -5,123 +5,16 @@ import java.util.regex.*;
 
 public class AnalizadorSintactico {
 
-    public String analizarEstructuras(File archivoC) {
-        StringBuilder reporte = new StringBuilder();
-        int errores = 0;
+    private int errores = 0;
+    private StringBuilder reporte = new StringBuilder();
 
+    public String analizarEstructuras(File archivoC) {
+        reporte.setLength(0);
+        errores = 0;
         try {
             List<String> lineas = Files.readAllLines(archivoC.toPath());
-            String contenido = String.join("\n", lineas);
-            Stack<Integer> pLla = new Stack<>();
-            Stack<Integer> pPar = new Stack<>();
-
             reporte.append("--- RECONOCIMIENTO Y VALIDACIÓN ---\n\n");
-
-            Pattern pFunc = Pattern.compile("\\b(int|void|float|char)\\b\\s+(\\w+)\\s*\\((.*?)\\)\\s*\\{");
-            Matcher mFunc = pFunc.matcher(contenido);
-
-            while (mFunc.find()) {
-                String tipo = mFunc.group(1);
-                String nombre = mFunc.group(2); 
-                String argumentosRaw = mFunc.group(3);
-
-                reporte.append(tipo).append("\nfuncion\n(\n");
-
-                // Validacion de argumentos dentro de parentesis
-                if (!argumentosRaw.trim().isEmpty()) {
-                    String[] args = argumentosRaw.split(",");
-                    for (int j = 0; j < args.length; j++) {
-                        String arg = args[j].trim();
-                        if (arg.matches("(int|float|char|void|double)\\s+\\w+")) {
-                            String[] partes = arg.split("\\s+");
-                            reporte.append(partes[0]).append("\nidentificador");
-                            if (j < args.length - 1)
-                                reporte.append("\n,");
-                            reporte.append("\n");
-                        } else {
-                            reporte.append("!!! ERROR EN ARGUMENTOS: ").append(arg).append("\n");
-                            errores++;
-                        }
-                    }
-                }
-                reporte.append(")\n{\n...\n}\n");
-            }
-
-            for (int i = 0; i < lineas.size(); i++) {
-                String lineaOriginal = lineas.get(i);
-                String linea = lineaOriginal.trim();
-                int nL = i + 1;
-
-                if (linea.isEmpty() || linea.startsWith("#") || linea.startsWith("//"))
-                    continue;
-
-                boolean esEstructura = false;
-                if (linea.startsWith("if")) {
-                    reporte.append("L").append(nL).append(": [if] ");
-                    esEstructura = true;
-                } else if (linea.startsWith("else")) {
-                    reporte.append("L").append(nL).append(": [else] ");
-                    esEstructura = true;
-                } else if (linea.startsWith("for")) {
-                    reporte.append("L").append(nL).append(": [for] ");
-                    esEstructura = true;
-                } else if (linea.startsWith("while") && !linea.endsWith(";")) {
-                    reporte.append("L").append(nL).append(": [while] ");
-                    esEstructura = true;
-                } else if (linea.startsWith("do")) {
-                    reporte.append("L").append(nL).append(": [do-while] ");
-                    esEstructura = true;
-                } else if (linea.startsWith("switch")) {
-                    reporte.append("L").append(nL).append(": [switch] ");
-                    esEstructura = true;
-                }
-
-                if (linea.startsWith("if") || (linea.startsWith("while") && !linea.endsWith(";"))
-                        || linea.startsWith("for") || linea.startsWith("switch")) {
-                    if (!linea.contains("(") || !linea.contains(")")) {
-                        reporte.append(" <--- ERROR: Falta ( )");
-                        errores++;
-                    }
-                }
-
-                if (necesitaPuntoYComa(linea)) {
-                    reporte.append("\nError [L: ").append(nL).append(", C: ").append(lineaOriginal.length())
-                            .append("]: Falta ';' al final.");
-                    errores++;
-                }
-
-                for (char c : lineaOriginal.toCharArray()) {
-                    if (c == '(')
-                        pPar.push(nL);
-                    else if (c == ')') {
-                        if (pPar.isEmpty()) {
-                            reporte.append("\nError [L: ").append(nL).append("]: ')' sin apertura.");
-                            errores++;
-                        } else
-                            pPar.pop();
-                    } else if (c == '{')
-                        pLla.push(nL);
-                    else if (c == '}') {
-                        if (pLla.isEmpty()) {
-                            reporte.append("\nError [L: ").append(nL).append("]: '}' sin apertura.");
-                            errores++;
-                        } else
-                            pLla.pop();
-                    }
-                }
-                if (esEstructura && !linea.contains("Error"))
-                    reporte.append("\n");
-            }
-
-            while (!pPar.isEmpty()) {
-                reporte.append("\nError: Paréntesis abierto en L").append(pPar.pop()).append(" no cerró.");
-                errores++;
-            }
-            while (!pLla.isEmpty()) {
-                reporte.append("\nError: Llave '{' abierta en L").append(pLla.pop()).append(" no cerró.");
-                errores++;
-            }
-
+            validarEstructuraGlobal(lineas);
         } catch (IOException e) {
             return "Error: " + e.getMessage();
         }
@@ -129,14 +22,178 @@ public class AnalizadorSintactico {
         if (errores > 0)
             reporte.append("\n\n>>> TOTAL DE ERRORES: ").append(errores);
         else
-            reporte.append("\n\n>>> ANÁLISIS EXITOSO: Estructuras correctas.");
+            reporte.append("\n\n>>> ANÁLISIS EXITOSO: Código y estructuras sintácticamente correctas.");
 
         return reporte.toString();
     }
 
-    private boolean necesitaPuntoYComa(String l) {
-        return !(l.isEmpty() || l.endsWith(";") || l.endsWith("{") || l.endsWith("}") ||
-                l.startsWith("if") || l.startsWith("for") || l.startsWith("while") ||
-                l.startsWith("switch") || l.startsWith("else") || l.equals("do") || l.startsWith("#"));
+    public void validarEstructuraGlobal(List<String> lineas) {
+        boolean enFuncion = false;
+        List<String> bloqueActual = new ArrayList<>();
+        Stack<Integer> llaves = new Stack<>();
+        int nl = 0;
+
+        for (String lineaOriginal : lineas) {
+            nl++;
+            String linea = lineaOriginal.trim();
+            if (linea.isEmpty() || linea.startsWith("//"))
+                continue;
+
+            if (linea.startsWith("#")) {
+                if (!linea.matches("^#include\\s*[<\"].+[>\"]$") && !linea.matches("^#define\\s+\\w+.*")) {
+                    registrarError(nl, "Directiva preprocesador inválida: " + linea);
+                } else {
+                    reporte.append("L").append(nl).append(": Directiva correcta -> ").append(linea).append("\n");
+                }
+                continue;
+            }
+
+            if (!enFuncion) {
+                // Comprobar declaración de función (ej. "int main() {" o "void suma(int a, int
+                // b)")
+                if (linea.matches("^(int|void|float|char|double)\\s+[a-zA-Z_]\\w*\\s*\\(.*\\)\\s*\\{?\\s*$")) {
+                    enFuncion = true;
+                    if (linea.endsWith("{")) {
+                        llaves.push(nl);
+                    }
+                    reporte.append("L").append(nl).append(": Declaración de función encontrada\n");
+                    validarArgumentosFuncion(linea, nl);
+                } else if (linea.equals("{")) {
+                    llaves.push(nl);
+                    enFuncion = true;
+                } else if (esDeclaracionVariable(linea)) {
+                    validarDeclaracionVariable(linea, nl);
+                } else {
+                    registrarError(nl, "Sentencia global inválida o ámbito incorrecto: " + linea);
+                }
+            } else {
+                bloqueActual.add(linea + " //-L:" + nl); // Marcar linea para el bloque
+                if (linea.contains("{")) {
+                    llaves.push(nl);
+                }
+                if (linea.contains("}")) {
+                    if (llaves.isEmpty())
+                        registrarError(nl, "'}' sin apertura previa.");
+                    else
+                        llaves.pop();
+
+                    if (llaves.isEmpty()) {
+                        enFuncion = false;
+                        validarBloqueSentencias(bloqueActual);
+                        bloqueActual.clear();
+                    }
+                }
+            }
+        }
+        if (!llaves.isEmpty()) {
+            registrarError(nl, "Falta cerrar " + llaves.size() + " llave(s) '}' en el código.");
+        }
+    }
+
+    private void validarArgumentosFuncion(String linea, int nl) {
+        Matcher m = Pattern.compile("\\((.*?)\\)").matcher(linea);
+        if (m.find()) {
+            String args = m.group(1).trim();
+            if (!args.isEmpty() && !args.equals("void")) {
+                String[] params = args.split(",");
+                for (String param : params) {
+                    if (!param.trim().matches("^(int|float|char|double|void)\\s+[a-zA-Z_]\\w*(?:\\s*\\[\\s*\\])?$")) {
+                        registrarError(nl, "Argumento de función inválido: " + param.trim());
+                    }
+                }
+            }
+        }
+    }
+
+    public void validarBloqueSentencias(List<String> sentencias) {
+        for (String sent : sentencias) {
+            String[] parts = sent.split("//-L:");
+            String linea = parts[0].trim();
+            int nl = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
+
+            if (linea.isEmpty())
+                continue;
+
+            String lnEvaluada = linea;
+            if (lnEvaluada.startsWith("}"))
+                lnEvaluada = lnEvaluada.substring(1).trim();
+            if (lnEvaluada.endsWith("{"))
+                lnEvaluada = lnEvaluada.substring(0, lnEvaluada.length() - 1).trim();
+            if (lnEvaluada.endsWith("}"))
+                lnEvaluada = lnEvaluada.substring(0, lnEvaluada.length() - 1).trim();
+
+            if (lnEvaluada.isEmpty())
+                continue;
+
+            if (lnEvaluada.startsWith("if") || lnEvaluada.startsWith("while") || lnEvaluada.startsWith("for")
+                    || lnEvaluada.startsWith("switch")) {
+                validarEstructurasControl(lnEvaluada, nl);
+            } else if (lnEvaluada.startsWith("else") || lnEvaluada.startsWith("do")) {
+                reporte.append("L").append(nl).append(": Estructura de control encontrada -> ").append(lnEvaluada)
+                        .append("\n");
+            } else if (esDeclaracionVariable(lnEvaluada)) {
+                validarDeclaracionVariable(lnEvaluada, nl);
+            } else {
+                validarSentenciaSimple(lnEvaluada, nl);
+            }
+        }
+    }
+
+    private void validarSentenciaSimple(String linea, int nl) {
+        if (!linea.endsWith(";")) {
+            registrarError(nl, "Falta ';' al final de la instrucción: " + linea);
+            return;
+        }
+
+        if (linea.matches("^[a-zA-Z_]\\w*\\s*\\(.*\\)\\s*;$")) {
+            reporte.append("L").append(nl).append(": Llamada a función válida\n");
+        } else if (linea.matches("^[a-zA-Z_]\\w*\\s*(?:\\+|-|\\*|/|%|)=.+;$")
+                || linea.matches("^[a-zA-Z_]\\w*(?:\\+\\+|--|\\+=\\d+|-=\\d+);$")) {
+            reporte.append("L").append(nl).append(": Asignación / Operación válida\n");
+        } else if (linea.matches("^return(\\s+.*)?;$") || linea.equals("break;") || linea.equals("continue;")) {
+            reporte.append("L").append(nl).append(": Sentencia de control (return/break/continue) válida\n");
+        } else {
+            registrarError(nl, "Sentencia no reconocida o estructura mal formada: " + linea);
+        }
+    }
+
+    public void validarEstructurasControl(String linea, int nl) {
+        String estructura = linea.replaceAll("\\(.*", "").trim();
+        reporte.append("L").append(nl).append(": Estructura de control encontrada -> ").append(estructura).append("\n");
+
+        if (!linea.contains("(")) {
+            registrarError(nl, "A la estructura de control le falta '(' de apertura.");
+        } else if (!linea.contains(")")) {
+            registrarError(nl, "A la estructura de control le falta ')' de cierre.");
+        }
+    }
+
+    public void validarDeclaracionVariable(String linea, int nl) {
+        if (!linea.endsWith(";")) {
+            registrarError(nl, "Declaración falta ';': " + linea);
+            return;
+        }
+
+        String clean = linea.substring(0, linea.length() - 1).trim();
+        // Regex para "tipo identificador" o múltiples como "tipo id1, id2 = val"
+        String varPattern = "[a-zA-Z_]\\w*(?:\\s*=\\s*[^,;]+)?";
+        String declPattern = "^(int|float|char|double|short|long)\\s+" + varPattern + "(?:\\s*,\\s*" + varPattern
+                + ")*$";
+
+        if (!clean.matches(declPattern)) {
+            registrarError(nl,
+                    "Declaración de variable mal formada (tipo, identificador, o asignación inicial): " + clean);
+        } else {
+            reporte.append("L").append(nl).append(": Declaración de variable correcta\n");
+        }
+    }
+
+    private boolean esDeclaracionVariable(String linea) {
+        return linea.matches("^(int|float|char|double|short|long)\\s+[a-zA-Z_].*");
+    }
+
+    private void registrarError(int linea, String mensaje) {
+        reporte.append("Error [L: ").append(linea).append("]: ").append(mensaje).append("\n");
+        errores++;
     }
 }

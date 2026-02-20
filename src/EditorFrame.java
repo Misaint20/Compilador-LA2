@@ -34,7 +34,7 @@ public class EditorFrame extends JFrame {
 
         JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(txtEditor), new JScrollPane(txtConsola));
         split.setDividerLocation(450);
-        add(split);
+        add(split, BorderLayout.CENTER);
     }
 
     private void setupMenus() {
