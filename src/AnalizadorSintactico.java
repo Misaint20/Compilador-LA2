@@ -7,10 +7,26 @@ public class AnalizadorSintactico {
 
     private int errores = 0;
     private StringBuilder reporte = new StringBuilder();
+    private String funcionActual = "Global";
+    private List<Variable> variables = new ArrayList<>();
+
+    static class Variable {
+        String tipo;
+        String nombre;
+        String funcion;
+
+        Variable(String tipo, String nombre, String funcion) {
+            this.tipo = tipo;
+            this.nombre = nombre;
+            this.funcion = funcion;
+        }
+    }
 
     public String analizarEstructuras(File archivoC) {
         reporte.setLength(0);
         errores = 0;
+        funcionActual = "Global";
+        variables.clear();
         try {
             List<String> lineas = Files.readAllLines(archivoC.toPath());
             reporte.append("--- RECONOCIMIENTO Y VALIDACIÓN ---\n\n");
@@ -21,8 +37,15 @@ public class AnalizadorSintactico {
 
         if (errores > 0)
             reporte.append("\n\n>>> TOTAL DE ERRORES: ").append(errores);
-        else
+        else {
             reporte.append("\n\n>>> ANÁLISIS EXITOSO: Código y estructuras sintácticamente correctas.");
+            reporte.append("\n\n--- TABLA DE VARIABLES ---\n");
+            reporte.append(String.format("%-15s | %-15s | %-15s\n", "FUNCION", "TIPO", "NOMBRE"));
+            reporte.append("--------------------------------------------------\n");
+            for (Variable v : variables) {
+                reporte.append(String.format("%-15s | %-15s | %-15s\n", v.funcion, v.tipo, v.nombre));
+            }
+        }
 
         return reporte.toString();
     }
@@ -49,10 +72,12 @@ public class AnalizadorSintactico {
             }
 
             if (!enFuncion) {
-                // Comprobar declaración de función (ej. "int main() {" o "void suma(int a, int
-                // b)")
                 if (linea.matches("^(int|void|float|char|double)\\s+[a-zA-Z_]\\w*\\s*\\(.*\\)\\s*\\{?\\s*$")) {
                     enFuncion = true;
+                    Matcher mFunc = Pattern.compile("^(?:int|void|float|char|double)\\s+([a-zA-Z_]\\w*)").matcher(linea);
+                    if (mFunc.find()) {
+                        funcionActual = mFunc.group(1);
+                    }
                     if (linea.endsWith("{")) {
                         llaves.push(nl);
                     }
@@ -67,7 +92,7 @@ public class AnalizadorSintactico {
                     registrarError(nl, "Sentencia global inválida o ámbito incorrecto: " + linea);
                 }
             } else {
-                bloqueActual.add(linea + " //-L:" + nl); // Marcar linea para el bloque
+                bloqueActual.add(linea + " //-L:" + nl); 
                 if (linea.contains("{")) {
                     llaves.push(nl);
                 }
@@ -81,6 +106,7 @@ public class AnalizadorSintactico {
                         enFuncion = false;
                         validarBloqueSentencias(bloqueActual);
                         bloqueActual.clear();
+                        funcionActual = "Global";
                     }
                 }
             }
@@ -97,8 +123,14 @@ public class AnalizadorSintactico {
             if (!args.isEmpty() && !args.equals("void")) {
                 String[] params = args.split(",");
                 for (String param : params) {
-                    if (!param.trim().matches("^(int|float|char|double|void)\\s+[a-zA-Z_]\\w*(?:\\s*\\[\\s*\\])?$")) {
-                        registrarError(nl, "Argumento de función inválido: " + param.trim());
+                    String pTrim = param.trim();
+                    if (!pTrim.matches("^(int|float|char|double|void)\\s+[a-zA-Z_]\\w*(?:\\s*\\[\\s*\\])?$")) {
+                        registrarError(nl, "Argumento de función inválido: " + pTrim);
+                    } else {
+                        Matcher mParam = Pattern.compile("^(int|float|char|double|void)\\s+([a-zA-Z_]\\w*)").matcher(pTrim);
+                        if (mParam.find()) {
+                            variables.add(new Variable(mParam.group(1), mParam.group(2), funcionActual));
+                        }
                     }
                 }
             }
@@ -175,7 +207,6 @@ public class AnalizadorSintactico {
         }
 
         String clean = linea.substring(0, linea.length() - 1).trim();
-        // Regex para "tipo identificador" o múltiples como "tipo id1, id2 = val"
         String varPattern = "[a-zA-Z_]\\w*(?:\\s*=\\s*[^,;]+)?";
         String declPattern = "^(int|float|char|double|short|long)\\s+" + varPattern + "(?:\\s*,\\s*" + varPattern
                 + ")*$";
@@ -185,6 +216,16 @@ public class AnalizadorSintactico {
                     "Declaración de variable mal formada (tipo, identificador, o asignación inicial): " + clean);
         } else {
             reporte.append("L").append(nl).append(": Declaración de variable correcta\n");
+            Matcher md = Pattern.compile("^(int|float|char|double|short|long)\\s+(.*)").matcher(clean);
+            if (md.find()) {
+                String tipo = md.group(1);
+                String varsStr = md.group(2);
+                String[] vars = varsStr.split(",");
+                for (String v : vars) {
+                    String nombre = v.split("=")[0].trim().replaceAll("\\[.*\\]", "");
+                    variables.add(new Variable(tipo, nombre, funcionActual));
+                }
+            }
         }
     }
 
