@@ -182,10 +182,32 @@ public class AnalizadorSintactico {
         } else if (linea.matches("^[a-zA-Z_]\\w*\\s*(?:\\+|-|\\*|/|%|)=.+;$")
                 || linea.matches("^[a-zA-Z_]\\w*(?:\\+\\+|--|\\+=\\d+|-=\\d+);$")) {
             reporte.append("L").append(nl).append(": Asignación / Operación válida\n");
+            
+            // Validar la expresión al lado derecho de la asignación
+            String operacionStr = linea.replaceAll("^[a-zA-Z_]\\w*\\s*(?:\\+|-|\\*|/|%|)=", "").replaceAll(";$","").trim();
+            if (!operacionStr.isEmpty() && !operacionStr.matches("^(?:\\+\\+|--|\\+=\\d+|-=\\d+)$")) {
+                if (validarExpresion(operacionStr)) {
+                    reporte.append("L").append(nl).append(": -> Expresión de asignación correcta según diagrama\n");
+                } else {
+                    registrarError(nl, "Expresión mal formada en asignación/operación: " + operacionStr);
+                }
+            }
         } else if (linea.matches("^return(\\s+.*)?;$") || linea.equals("break;") || linea.equals("continue;")) {
             reporte.append("L").append(nl).append(": Sentencia de control (return/break/continue) válida\n");
+            if (linea.startsWith("return ")) {
+                String expReturn = linea.substring(7).replaceAll(";$","").trim();
+                if (!expReturn.isEmpty() && !validarExpresion(expReturn)) {
+                    registrarError(nl, "Expresión mal formada en return: " + expReturn);
+                }
+            }
         } else {
-            registrarError(nl, "Sentencia no reconocida o estructura mal formada: " + linea);
+            // Evaluacion de expresiones independientes
+            String probExp = linea.substring(0, linea.length()-1).trim();
+            if (validarExpresion(probExp)) {
+                reporte.append("L").append(nl).append(": Expresión independiente válida\n");
+            } else {
+                registrarError(nl, "Sentencia no reconocida o estructura mal formada: " + linea);
+            }
         }
     }
 
@@ -236,5 +258,63 @@ public class AnalizadorSintactico {
     private void registrarError(int linea, String mensaje) {
         reporte.append("Error [L: ").append(linea).append("]: ").append(mensaje).append("\n");
         errores++;
+    }
+
+    private Elementos tablaElementos = new Elementos();
+
+    public boolean validarExpresion(String expresion) {
+        if (expresion == null || expresion.trim().isEmpty()) {
+            return false;
+        }
+        
+        String expr = expresion.trim();
+        
+        expr = expr.replaceAll("'.'|'\\\\[a-zA-Z0-9]'", " OPERANDO ");
+        
+        expr = expr.replaceAll("\\b\\d+\\.\\d+\\b", " OPERANDO "); 
+        expr = expr.replaceAll("\\b\\d+\\b", " OPERANDO "); 
+        
+        expr = expr.replaceAll("\\b(true|false)\\b", " OPERANDO ");
+        
+        expr = expr.replaceAll("\\b[a-zA-Z_]\\w*\\s*\\([^()]*\\)", " OPERANDO ");
+        
+        expr = expr.replaceAll("\\b[a-zA-Z_]\\w*\\b", " OPERANDO ");
+        
+        List<String> opDes = new ArrayList<>(tablaElementos.Operadores);
+        opDes.sort((a, b) -> Integer.compare(b.length(), a.length()));
+        
+        List<String> opUnariosDes = new ArrayList<>(tablaElementos.OperadoresUnarios);
+        opUnariosDes.sort((a, b) -> Integer.compare(b.length(), a.length()));
+
+        boolean huboCambios = true;
+        while (huboCambios) {
+            huboCambios = false;
+            String previo = expr;
+            
+            expr = expr.replaceAll("\\(\\s*OPERANDO\\s*\\)", " OPERANDO ");
+            
+            for (String opU : opUnariosDes) {
+                String rx = Pattern.quote(opU);
+                if (opU.equals("sizeof")) rx = "\\bsizeof\\b";
+                expr = expr.replaceAll(rx + "\\s*OPERANDO", " OPERANDO ");
+            }
+            
+            for (String opU : opUnariosDes) {
+                String rx = Pattern.quote(opU);
+                if (opU.equals("sizeof")) continue; 
+                expr = expr.replaceAll("OPERANDO\\s*" + rx, " OPERANDO ");
+            }
+            
+            for (String op : opDes) {
+                String rx = Pattern.quote(op);
+                expr = expr.replaceAll("OPERANDO\\s*" + rx + "\\s*OPERANDO", " OPERANDO ");
+            }
+            
+            if (!expr.equals(previo)) {
+                huboCambios = true;
+            }
+        }
+        
+        return expr.trim().equals("OPERANDO"); 
     }
 }

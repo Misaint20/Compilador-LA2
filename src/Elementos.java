@@ -1,8 +1,22 @@
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.List;
+import java.util.Arrays;
 
 public class Elementos {
     public final Map<String, String> PalabrasReservadas = new LinkedHashMap<>();
+
+    public final List<String> Operadores = Arrays.asList(
+            "/", "*", "%", "+", "-", ">", "<", ">=", "<=", "==", "!=", "&&", "||", "=", "+=", "-=", "*=", "/=", "%=", "&", "|", "^", "<<", ">>"
+    );
+
+    public final List<String> OperadoresUnarios = Arrays.asList(
+            "++", "--", "-", "!", "~", "*", "&", "sizeof"
+    );
+
+    public final List<String> TiposOperando = Arrays.asList(
+            "Identificador", "Invocacion de Funcion", "Caracter", "Entero", "Flotante", "Boleano"
+    );
 
     public Elementos() {
         // --- Tipos de Datos y Modificadores ---

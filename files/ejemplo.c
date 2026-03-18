@@ -8,6 +8,7 @@ float suma(float a, float b){
 
 int main() {
     int num1, num2, suma;
+    char b, c;
     printf("Introduce el primer numero: ");
     scanf("%d", &num1);
     printf("Introduce el segundo numero: ");
@@ -18,6 +19,8 @@ int main() {
     } else {
         printf("%d es impar.\n", num1);
     }
+
+    b + c;
 
     if (num2 % 2 == 0) {
         printf("%d es par.\n", num2);
